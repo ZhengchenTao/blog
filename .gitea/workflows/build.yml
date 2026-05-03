@@ -3,91 +3,42 @@ name: Build and Deploy Blog
 on:
   push:
     branches: [main]
-    # paths-ignore 注意:
-    #   ❌ 千万别加 **.md —— content/posts/*.md 是文章本身,排除等于不发文章
-    #   ✅ 只排除根级文档 / 部署清单 / 不影响产物的文件
     paths-ignore:
       - 'README.md'
       - 'LICENSE'
       - '.gitignore'
-      - 'deploy/**'
   workflow_dispatch:
 
-# 连续 push 只跑最新一次,旧 in-progress run 取消(参考 Gitea Actions 模板 §4.4)
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   build:
+    # host 模式:step 直接在 gitea-runner 容器内跑(Alpine),
+    # /blog-public 由 runner docker-compose 直接 bind 到 NAS,无需 act_runner 注入
     runs-on: ubuntu-latest
-    # 显式声明 job 容器:
-    # - image: 跟 GITEA_RUNNER_LABELS 里 ubuntu-latest 映射的镜像保持一致
-    # - volumes: 把 NAS 静态目录挂进 job 容器(需要 act_runner config.yaml 的
-    #   valid_volumes 白名单允许该 host 路径)
-    # 这是 act_runner v0.4.1 让 host 路径进 job 容器的官方路径——
-    # 全局 container.options 字段在该版本被忽略,实测无效。
-    container:
-      image: catthehacker/ubuntu:act-latest
-      volumes:
-        - /volume1/docker/blog/public:/blog-public:rw
     steps:
-      - name: Checkout (with submodules)
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           submodules: recursive
           fetch-depth: 0
 
+      - name: Install build tools (Alpine)
+        # runner 镜像是 alpine,只有 apk;每次跑装一遍,几秒钟,小代价换零状态
+        run: apk add --no-cache curl tar rsync git bash
+
       - name: Install Hugo Extended
-        # 钉死版本,避免 latest 漂移导致 PaperMod / Hextra / Stack 弃用警告升级为 error
         run: |
           HUGO_VERSION=0.161.1
           curl -fsSL "https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/hugo_extended_${HUGO_VERSION}_linux-amd64.tar.gz" | tar -xz
-          sudo install hugo /usr/local/bin/
+          install hugo /usr/local/bin/
           hugo version
 
       - name: Build site
         run: hugo --gc --minify
 
-      - name: Verify /blog-public is host-mounted
-        # 必须 fail-fast,否则 rsync 写到 job 容器临时目录(act_runner container.options
-        # 没生效时 rsync 会自动建临时 /blog-public),build 显示成功但 NAS 上是空的
+      - name: Deploy to /blog-public
         run: |
-          if ! mount | grep -qE '\s/blog-public\s'; then
-            echo "::error::/blog-public is NOT a host mount."
-            echo "act_runner container.options likely not effective. Check runner config + restart."
-            echo ""
-            echo "=== /blog-public state ==="
-            ls -la /blog-public/ 2>&1 || true
-            echo ""
-            echo "=== mount table (top 30) ==="
-            mount | head -30
-            exit 1
-          fi
-          echo "mount verified:"
-          mount | grep '/blog-public'
-          ls -la /blog-public/
-
-      - name: Ensure rsync available
-        run: which rsync || (sudo apt-get update -qq && sudo apt-get install -y -qq rsync)
-
-      - name: Deploy to /blog-public (mounted from NAS)
-        # /blog-public 是 runner 容器内挂载点
-        # 对应 NAS host 路径 /volume1/docker/blog/public
-        # blog nginx 容器只读挂载同一目录,文件系统层立即同步,无需重启
-        run: rsync -av --delete public/ /blog-public/
-
-      - name: Build summary
-        if: always()
-        run: |
-          {
-            echo "## Build Summary"
-            echo ""
-            echo "| 项 | 值 |"
-            echo "|---|---|"
-            echo "| 触发方式 | \`${{ github.event_name }}\` |"
-            echo "| commit | \`$(git rev-parse --short HEAD)\` |"
-            echo "| Hugo 版本 | \`0.161.1 extended\` |"
-            echo "| 文章数 | \`$(ls content/posts/*.md 2>/dev/null | wc -l)\` |"
-            echo "| public/ 总大小 | \`$(du -sh public 2>/dev/null | cut -f1)\` |"
-          } >> "$GITHUB_STEP_SUMMARY"
+          [ -d /blog-public ] || { echo "::error::/blog-public missing, runner compose 没挂上"; exit 1; }
+          rsync -av --delete public/ /blog-public/
