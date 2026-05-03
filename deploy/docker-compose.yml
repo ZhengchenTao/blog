@@ -1,0 +1,28 @@
+# 拉到 NAS:/volume1/docker/compose/blog/docker-compose.yml
+# 仅供参考 / 重建用 —— 5-02 容器已在跑,正常情况下不需要重建
+#
+# 部署:
+#   ssh nas
+#   cd /volume1/docker/compose/blog
+#   docker compose up -d
+#
+# 真正"自动更新"靠 Gitea Actions(.gitea/workflows/build.yml):
+# push → runner build hugo → rsync 到 /volume1/docker/blog/public/
+# nginx 直接 serve 新文件(只读挂载,文件系统层同步,无需重启容器)
+
+services:
+  blog:
+    image: nginx:alpine
+    container_name: blog
+    restart: unless-stopped
+    ports:
+      - "8082:80"
+    volumes:
+      - /volume1/docker/blog/public:/usr/share/nginx/html:ro
+    environment:
+      - TZ=Asia/Shanghai
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O-", "http://localhost/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

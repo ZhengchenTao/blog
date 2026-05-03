@@ -1,0 +1,64 @@
+name: Build and Deploy Blog
+
+on:
+  push:
+    branches: [main]
+    # paths-ignore 注意:
+    #   ❌ 千万别加 **.md —— content/posts/*.md 是文章本身,排除等于不发文章
+    #   ✅ 只排除根级文档 / 部署清单 / 不影响产物的文件
+    paths-ignore:
+      - 'README.md'
+      - 'LICENSE'
+      - '.gitignore'
+      - 'deploy/**'
+  workflow_dispatch:
+
+# 连续 push 只跑最新一次,旧 in-progress run 取消(参考 Gitea Actions 模板 §4.4)
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Install Hugo Extended
+        # 钉死版本,避免 latest 漂移导致 PaperMod / Hextra / Stack 弃用警告升级为 error
+        run: |
+          HUGO_VERSION=0.161.1
+          curl -fsSL "https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/hugo_extended_${HUGO_VERSION}_linux-amd64.tar.gz" | tar -xz
+          sudo install hugo /usr/local/bin/
+          hugo version
+
+      - name: Build site
+        run: hugo --gc --minify
+
+      - name: Ensure rsync available
+        run: which rsync || (sudo apt-get update -qq && sudo apt-get install -y -qq rsync)
+
+      - name: Deploy to /blog-public (mounted from NAS)
+        # /blog-public 是 runner 容器内挂载点
+        # 对应 NAS host 路径 /volume1/docker/blog/public
+        # blog nginx 容器只读挂载同一目录,文件系统层立即同步,无需重启
+        run: rsync -av --delete public/ /blog-public/
+
+      - name: Build summary
+        if: always()
+        run: |
+          {
+            echo "## Build Summary"
+            echo ""
+            echo "| 项 | 值 |"
+            echo "|---|---|"
+            echo "| 触发方式 | \`${{ github.event_name }}\` |"
+            echo "| commit | \`$(git rev-parse --short HEAD)\` |"
+            echo "| Hugo 版本 | \`0.161.1 extended\` |"
+            echo "| 文章数 | \`$(ls content/posts/*.md 2>/dev/null | wc -l)\` |"
+            echo "| public/ 总大小 | \`$(du -sh public 2>/dev/null | cut -f1)\` |"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,48 @@
+// 卡片 padding 比 Stack 默认 20/25/30 略宽一点,保证所有内容(含引用/code/图片)
+// 都呆在 padding 内不顶到边
+:root {
+    --card-padding: 24px;
+}
+
+@media (min-width: 768px) {
+    :root {
+        --card-padding: 28px;
+    }
+}
+
+@media (min-width: 1280px) {
+    :root {
+        --card-padding: 32px;
+    }
+}
+
+// 取消 Stack 默认的"标题 hanging 出 .article-content 左 padding"效果
+// 让 H1-H6 的左竖线不再顶到卡片边框,留出呼吸空间
+.article-content {
+    h1, h2, h3, h4, h5, h6 {
+        margin-inline-start: 0;
+        padding-inline-start: 0.6em;
+
+        // 锚点 # 浮在标题文字左外侧,避免和竖线重叠
+        a.header-anchor {
+            left: auto;
+            right: 100%;
+            width: 1.4em;
+        }
+    }
+
+    // 取消 Stack 默认让 blockquote / figure / code / table 等"独立块"用负 margin
+    // hanging 出卡片左右边缘的设计,让所有内容统一呆在 article-content 的 padding 内
+    blockquote,
+    figure,
+    .highlight,
+    pre,
+    .gallery,
+    .video-wrapper,
+    .table-wrapper,
+    .s_video_simple {
+        margin-left: 0;
+        margin-right: 0;
+        width: 100%;
+    }
+}
