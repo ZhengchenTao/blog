@@ -24,10 +24,6 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
-      - name: Install build tools (Alpine)
-        # runner 镜像是 alpine,只有 apk;每次跑装一遍,几秒钟,小代价换零状态
-        run: apk add --no-cache curl tar rsync git bash
-
       - name: Install Hugo Extended
         run: |
           HUGO_VERSION=0.161.1
