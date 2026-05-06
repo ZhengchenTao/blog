@@ -20,7 +20,7 @@ services:
 params:
   mainSections: ["posts"]
   rssFullContent: true
-  favicon: ""
+  favicon: "/favicon.svg"
 
   footer:
     since: 2026
