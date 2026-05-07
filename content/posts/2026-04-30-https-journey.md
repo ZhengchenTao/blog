@@ -1,13 +1,11 @@
 ---
-title: "一次 HTTPS 请求的完整旅程:从硅片到光纤,从数论到博弈论"
+title: "一次 HTTPS 请求的完整旅程：从硅片到光纤，从数论到博弈论"
 date: 2026-04-30
 slug: https-journey
 tags: ["HTTPS", "TLS", "网络", "密码学", "GFW", "科普", "Reality"]
 categories: ["科普"]
 description: "从指尖按下屏幕,到电子在硅里隧穿、电磁波在空中传播、光子在光纤里复制、数据在海底跨洋、密钥在素数空间里暗藏——一篇关于一次 HTTPS 请求背后整条链路的科普长文。"
 draft: false
-ShowToc: true
-TocOpen: false
 ---
 
 > 一篇关于"按一下手机搜索按钮,到看到结果之间这不到一秒钟,世界上发生了什么"的科普长文。

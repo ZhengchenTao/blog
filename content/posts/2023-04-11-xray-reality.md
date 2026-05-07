@@ -1,5 +1,5 @@
 ---
-title: "Xray Reality 协议:消除 TLS 指纹的现代代理方案"
+title: "Xray Reality 协议：消除 TLS 指纹的现代代理方案"
 date: 2023-04-11
 lastmod: 2026-05-03
 slug: xray-reality
