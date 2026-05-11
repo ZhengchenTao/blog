@@ -2,7 +2,7 @@ baseURL: "https://blog.zhengchentao.win/"
 title: "陶政辰的笔记本"
 theme: stack
 
-defaultContentLanguage: zh-cn
+defaultContentLanguage: zh
 hasCJKLanguage: true
 languageCode: zh-cn
 
