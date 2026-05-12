@@ -4,11 +4,11 @@ date: 2026-05-02
 slug: ai-engineer-map
 tags: ["AI", "LLM", "Prompt", "RAG", "MCP", "Agent", "Claude", "Cursor", "Ollama"]
 categories: ["AI"]
-description: "从大模型 / Prompt / RAG / MCP / Agent / 多模态 / 成本控制 / 编码工具一路捋下来,适合有技术背景的开发者快速建立 AI 知识框架。"
+description: "从大模型 / Prompt / RAG / MCP / Agent / 多模态 / 成本控制 / 编码工具一路捋下来，适合有技术背景的开发者快速建立 AI 知识框架。"
 draft: false
 ---
 
-> 适合有一定技术背景的开发者快速建立 AI 知识框架。涵盖核心概念、工程实践、工具选型,持续更新。
+> 适合有一定技术背景的开发者快速建立 AI 知识框架。涵盖核心概念、工程实践、工具选型，持续更新。
 
 ---
 
