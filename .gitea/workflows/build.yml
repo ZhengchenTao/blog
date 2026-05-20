@@ -4,7 +4,9 @@ on:
   push:
     branches: [main]
     paths-ignore:
-      - 'README.md'
+      # 'README*.md' 覆盖 README.md / README.en.md / 未来 README.<lang>.md
+      # (注意:这里不能用 '**/*.md',否则 content/posts/*.md 也被忽略,新文章不会触发 build)
+      - 'README*.md'
       - 'LICENSE'
       - '.gitignore'
   workflow_dispatch:
