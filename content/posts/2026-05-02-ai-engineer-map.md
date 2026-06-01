@@ -10,7 +10,7 @@ draft: false
 
 > 适合有一定技术背景的开发者快速建立 AI 知识框架。涵盖核心概念、工程实践、工具选型，持续更新。
 >
-> 注：模型版本、价格、上下文窗口、工具套餐变化很快，文中涉及具体数字的部分以 2026 年 5 月前后的公开信息为准，更重要的是理解背后的选型逻辑。
+> 注：模型版本、价格、上下文窗口、工具套餐变化很快，文中涉及具体数字的部分以 2026 年 6 月 1 日前后的公开信息为准，更重要的是理解背后的选型逻辑。
 
 ---
 
@@ -23,8 +23,8 @@ draft: false
 | 模型 | 厂商 | 特点 |
 |------|------|------|
 | Claude 系列 | Anthropic | 长上下文强、指令遵循准确、代码能力突出 |
-| GPT-4o / o 系列 | OpenAI | 生态最成熟、多模态能力强、工具链完善 |
-| Gemini 系列 | Google | 原生多模态、超长上下文（1M token）、深度集成 Google 工具 |
+| GPT-5 / GPT-4.1 / o 系列 | OpenAI | 生态成熟、多模态和工具链完善，推理模型适合复杂任务 |
+| Gemini 系列 | Google | 原生多模态、长上下文，深度集成 Google 工具 |
 | DeepSeek | 深度求索 | 推理能力强、API 价格极低、开源友好 |
 | Qwen 系列 | 阿里 | 中文效果好、有本地部署版本、国内访问友好 |
 
@@ -42,12 +42,12 @@ draft: false
 
 **各模型上下文窗口示例：**
 
-| 模型                | 上下文窗口      |
-| ----------------- | ---------- |
-| GPT-4o            | 128K token |
-| Claude Sonnet 4.6 | 200K token |
-| Gemini 1.5 Pro    | 1M token   |
-| DeepSeek-V3       | 128K token |
+| 模型 | 上下文窗口 |
+|------|------------|
+| GPT-4o / GPT-4.1 系列 | 128K token 量级 |
+| Claude Sonnet 4 / 4.6 | 常规 200K token；部分产品形态有更大窗口测试 |
+| Gemini Pro 系列 | 1M token 量级 |
+| DeepSeek-V3 | 128K token 量级 |
 
 这些数字只适合作为量级参考，具体窗口大小会随模型版本和 API 配置变化。
 
@@ -61,7 +61,7 @@ draft: false
 
 ### AI 幻觉
 
-模型生成文字的本质是**预测下一个概率最高的 token**，不是在查找事实。这意味着它在不确定的时候不会说"我不知道"，而是倾向于生成一段"听起来合理"的内容。
+模型生成文字的本质是根据上下文预测后续 token，不等于在查找事实。这意味着它在不确定的时候也可能生成一段"听起来合理"的内容。
 
 **减少幻觉的主要手段：**
 
@@ -139,7 +139,7 @@ Prompt 是和 AI 沟通最直接的入口。写得好和写得差，效果差距
 ### 常见误区
 
 - **Prompt 越长越好**：不对，冗余信息会稀释关键指令，模型容易抓不住重点
-- **"请帮我"、"谢谢"有用**：没有，礼貌词不影响输出质量
+- **"请帮我"、"谢谢"决定效果**：礼貌词不是主要变量，清晰的任务、约束和示例更重要
 - **一次写好 prompt**：Prompt 是需要反复调试的，像调代码一样迭代
 
 ---
@@ -267,12 +267,12 @@ Semantic Kernel 的 Plugin 机制就是干这件事的。
 
 微软出品，支持 .NET / Python / Java，对 .NET 技术栈的团队非常友好。
 
-类比为 AI 领域的 EF Core——屏蔽不同模型间的 API 差异，业务代码面向接口编程，换模型只改配置。
+它更像 AI 编排层的 SDK：屏蔽不同模型间的 API 差异，让业务代码尽量面向接口编程，换模型时少改业务逻辑。
 
 ```csharp
 // Program.cs
 builder.Services.AddKernel()
-    .AddAnthropicChatCompletion("claude-sonnet-4-6", apiKey);
+    .AddOpenAIChatCompletion("gpt-4.1-mini", apiKey);
 
 // Service 层注入使用
 var result = await kernel.InvokePromptAsync("分析这个玩家的充值行为：{{$input}}");
@@ -284,10 +284,10 @@ var result = await kernel.InvokePromptAsync("分析这个玩家的充值行为�
 
 ### MCP（Model Context Protocol）
 
-Anthropic 于 2024 年 11 月发布的开放协议，定义了"AI 如何标准化调用外部工具和读取外部上下文"，目前已经被主流 AI 客户端和开发工具快速采用。
+Anthropic 于 2024 年 11 月发布的开放协议，定义了"AI 如何标准化调用外部工具和读取外部上下文"，目前已经被不少 AI 客户端和开发工具采用。
 
-- 2025 年 3 月 OpenAI 开始跟进支持
-- 2025 年 12 月捐给 Linux 基金会，OpenAI、Google、微软均为成员
+- 2025 年 3 月，OpenAI 宣布在 Agents SDK 等产品线中支持 MCP
+- 2025 年 12 月，Anthropic 将 MCP 捐给 Linux Foundation 旗下的 Agentic AI Foundation，OpenAI、Google、Microsoft、AWS、Cloudflare 等参与支持
 - 公开生态里已经出现大量 MCP Server，覆盖文件系统、数据库、浏览器、代码仓库、云服务等场景
 
 ```
@@ -358,7 +358,7 @@ with open("screenshot.png", "rb") as f:
 
 client = anthropic.Anthropic()
 message = client.messages.create(
-    model="claude-sonnet-4-6",
+    model="<claude-sonnet-model-id>",
     messages=[{
         "role": "user",
         "content": [
@@ -383,9 +383,9 @@ message = client.messages.create(
 
 | 任务类型 | 推荐模型 | 大约成本比 |
 |---------|---------|-----------|
-| 简单分类、关键词提取 | Claude Haiku / GPT-4o-mini | 1x |
-| 普通问答、代码补全 | Claude Sonnet / GPT-4o | 10x |
-| 复杂推理、长文档分析 | Claude Opus / o3 | 50x+ |
+| 简单分类、关键词提取 | Claude Haiku / GPT-5 mini / GPT-4.1 mini | 1x |
+| 普通问答、代码补全 | Claude Sonnet / GPT-5 / GPT-4.1 | 10x |
+| 复杂推理、长文档分析 | Claude Opus / OpenAI reasoning models | 50x+ |
 
 ### Prompt 缓存（Cache）
 
@@ -452,7 +452,7 @@ response = query_engine.query("这个接口的限流规则是什么？")
 
 ### 自托管个人 Agent
 
-2025 年底到 2026 年初，自托管个人 Agent 开始快速升温，OpenClaw 是其中比较有代表性的项目。核心理念是：**以消息平台作为操作界面，让 AI 替你在本机或服务器上自主执行任务**。
+2025 年底到 2026 年初，自托管个人 Agent 开始升温，OpenClaw 是其中比较有代表性的项目。核心理念是：**以消息平台作为操作界面，让 AI 在本机或服务器上按授权执行任务**。
 
 你不需要打开任何 App，直接在 Telegram、Slack、微信里发一条消息，AI 就能完成文件操作、调接口、发邮件、查数据——完全跑在你自己的机器上，数据不出去。
 
@@ -460,7 +460,7 @@ response = query_engine.query("这个接口的限流规则是什么？")
 
 **两种能力扩展机制：**
 
-- **Skills（技能包）**：结构化的"操作手册"，明确告诉 AI 在特定场景下按什么顺序调哪些工具。社区已有 100+ 预置 Skills，可以自己写，甚至让 AI 来写新的 Skill
+- **Skills（技能包）**：结构化的"操作手册"，明确告诉 AI 在特定场景下按什么顺序调哪些工具。数量和质量取决于项目生态，可以自己写，也可以让 AI 辅助生成
 - **MCP**：对外连接标准协议，把公司内部系统接进来。Skills 解决"什么时候怎么调"，MCP 解决"能不能调"
 
 **典型使用场景：**
@@ -470,7 +470,7 @@ response = query_engine.query("这个接口的限流规则是什么？")
 
 **部署：** 通常支持 Windows / macOS / Linux 本地部署，也可以放在云服务器上运行。底层模型一般可以接 Claude、GPT、DeepSeek、Qwen 或本地模型。
 
-OpenClaw 的爆火说明了一件事：开发者已经不满足于"和模型聊天"，而是希望 AI 能长期在线、拥有工具、能在受控权限下执行真实任务。
+这类工具的走红说明了一件事：开发者已经不满足于"和模型聊天"，而是希望 AI 能长期在线、拥有工具、能在受控权限下执行真实任务。
 
 但这类产品的安全风险也更高：它们往往能读文件、跑命令、访问浏览器和第三方账号。企业内部使用时，一定要做权限最小化、操作审计、敏感动作确认和密钥隔离。
 
@@ -516,7 +516,7 @@ OpenClaw 的爆火说明了一件事：开发者已经不满足于"和模型聊�
 - **Copilot Edits**：跨多文件批量修改
 - **Copilot Agent**：自主完成较复杂任务，可以发 PR
 
-底层以 GPT 系列为主，近期加入 Claude 和 Gemini 可选。
+底层模型以 GitHub 当前支持列表为准，近年的趋势是提供 OpenAI、Anthropic、Google 等多模型选择。
 
 **价格：** 有免费和付费个人版，也提供企业/组织方案，具体额度以 GitHub 当前定价为准。
 
@@ -530,7 +530,7 @@ OpenClaw 的爆火说明了一件事：开发者已经不满足于"和模型聊�
 - **Cmd+K**：选中代码 + 描述，直接内联修改
 - **Chat 侧边栏**：带完整代码库索引，跨文件理解逻辑
 
-底层模型可选：Claude、GPT-4o、DeepSeek 都支持。
+底层模型可选范围取决于 Cursor 当期套餐和自定义 API 配置，通常会覆盖 Claude、OpenAI、Gemini 以及部分第三方模型。
 
 **价格：** 有免费和付费个人版，额度和模型调用规则变化较快，重度使用前建议先看当月套餐说明。
 
@@ -538,7 +538,7 @@ OpenClaw 的爆火说明了一件事：开发者已经不满足于"和模型聊�
 
 #### Google Antigravity
 
-Google 2025 年 11 月随 Gemini 3 发布，VS Code fork，理念比 Cursor 更激进。
+Google 2025 年 11 月随 Gemini 3 发布 Antigravity，定位是 agent-first 的开发工具，理念比传统编辑器更激进。
 
 - **Editor 模式**：类似 Cursor，Tab 补全 + 内联改 + 侧边 Agent
 - **Manager 模式**：同时派发多个 Agent 并行处理不同任务，统一监控
@@ -572,7 +572,7 @@ claude "找出所有数据库查询超过 500ms 的接口，加上耗时日志�
 
 #### Codex（OpenAI）
 
-OpenAI 2025 年 4 月发布，特点是沙箱隔离运行、多任务并行、适合把相对独立的开发任务拆出去执行。
+OpenAI 在 2025 年 4 月先推出 Codex CLI，随后发布 Codex 产品形态。它的特点是沙箱隔离运行、多任务并行，适合把相对独立的开发任务拆出去执行。
 
 **价格：** 随 ChatGPT 订阅和 OpenAI API 策略变化，具体以当前产品说明为准。
 
@@ -584,7 +584,7 @@ OpenAI 2025 年 4 月发布，特点是沙箱隔离运行、多任务并行、�
 |------|------|---------|------|
 | GitHub Copilot | IDE 插件 | 已经在 VS Code / JetBrains / Visual Studio 工作的团队 | 不换编辑器，企业管控友好 |
 | Cursor | IDE（VS Code fork）| 个人开发、快速迭代、重度代码补全 | Tab 补全体验成熟，迁移成本低 |
-| Antigravity | IDE（VS Code fork）| 愿意尝试多 Agent 并行的新项目 | 多 Agent 管理视图，产品形态激进 |
+| Antigravity | Agent-first 开发工具 | 愿意尝试多 Agent 并行的新项目 | 多 Agent 管理视图，产品形态激进 |
 | Claude Code | CLI Agent | 跨文件重构、排障、批量修改 | Agent 能力强，支持 MCP |
 | Codex | CLI Agent | 多任务并行、隔离环境里的开发任务 | 沙箱隔离，适合拆分任务 |
 

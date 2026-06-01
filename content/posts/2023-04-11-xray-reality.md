@@ -1,16 +1,18 @@
 ---
 title: "Xray Reality 协议：隐藏服务端 TLS 指纹的现代代理方案"
 date: 2023-04-11
-lastmod: 2026-05-29
+lastmod: 2026-06-01
 slug: xray-reality
 tags: ["TLS", "Xray", "VLESS", "Reality", "X25519", "代理协议"]
 categories: ["网络协议"]
-description: "REALITY 协议通过 TLS 1.3 key_share 字段嵌入身份标记，并在主动探测时透明回放真站，从协议层降低服务端 TLS 指纹特征。本文从协议设计到服务端 / 客户端完整搭建。"
+description: "REALITY 通过修改 TLS 握手并在主动探测时回落到真实目标站点，降低传统代理常见的证书和服务端指纹特征。本文从协议设计到服务端 / 客户端配置做一份可复查的技术笔记。"
 draft: false
 ---
 
-> 整理自 [bandwh.com](https://www.bandwh.com/net/994.html)（原文 2023-04-11），本文于 2026-05 根据 Xray-core v26.x 重新整理。  
-> 适用系统：Debian 11 / Ubuntu 22.04+ | Xray 版本：>= 1.8.0（当前 latest 见 [Xray-core releases](https://github.com/XTLS/Xray-core/releases)，2024 起改用 CalVer，例如 v26.3.27 = 2026-03-27）  
+> 整理自 [bandwh.com](https://www.bandwh.com/net/994.html)（原文 2023-04-11），本文于 2026-06 按 Xray-core v26.x 文档重新核对。
+>
+> 适用系统：Debian 11 / Ubuntu 22.04+ | Xray 版本：>= 1.8.0；具体最新版请看 [Xray-core releases](https://github.com/XTLS/Xray-core/releases)。2024 起 Xray-core 改用 CalVer，例如 v26.5.9 表示 2026 年 5 月 9 日附近的版本。
+>
 > 文中所有 UUID / X25519 密钥均为示例值，实际部署务必使用 `xray uuid` / `xray x25519` 重新生成。
 >
 > 本文是协议学习和自建加密代理的技术笔记。实际使用时请遵守所在地法律法规、云服务商条款和网络使用规范。
@@ -23,7 +25,7 @@ draft: false
 
 传统 v2ray 方案需要购买域名并生成 TLS 证书，通过各种流量伪装来规避检测。然而随着 DPI 检测能力的升级，**部分 v2ray / XTLS 组合的协议特征已经更容易被识别**，导致 VPS 的 443 端口频繁被封锁或阻断。
 
-Xray 1.8.0 版本推出了全新的 **REALITY 协议**，配合此前的 **Vision 流控**，组成了当前最新的协议组合：
+Xray 1.8.0 版本推出 **REALITY 协议**，配合此前的 **Vision 流控**，形成了后来很常见的一套组合：
 ```
 VLESS + Vision + uTLS + REALITY
 ```
@@ -62,7 +64,7 @@ Reality 的抗识别效果，要分「被动监听」和「主动探测」两种
 |---|---|---|---|
 | ① DNS | 查询 VPS 对应的域名（若客户端直接填 IP 则跳过） | 一次明文 DNS 请求；若走 DoH/DoT 加密 DNS 则看不到 | — |
 | ② TCP | 解析到 `203.0.113.10`，发起 TCP SYN 到 `203.0.113.10:443` | 客户端跟某境外 IP 建立 TCP 连接 | accept |
-| ③ TLS ClientHello | 发送 ClientHello：**SNI = `www.microsoft.com`**，并在 `key_share` 字段藏入基于 Reality 公钥派生的标记 | TLS 1.3 握手开始，**目标看起来是 www.microsoft.com**；uTLS 尽量模拟 Chrome / Firefox 指纹 | Xray 验证标记 ✓ → 接管连接 |
+| ③ TLS ClientHello | 发送 ClientHello：**SNI = `www.microsoft.com`**，并在握手参数里带上基于 Reality 公钥派生的标记 | TLS 1.3 握手开始，**目标看起来是 www.microsoft.com**；uTLS 尽量模拟 Chrome / Firefox 指纹 | Xray 验证标记 ✓ → 接管连接 |
 | ④ 后续 | TLS 握手完成，进入 VLESS 加密流量 | TLS 1.3 握手完成 + 加密流量，协议层特征比传统 v2ray 更少 | 解密 VLESS，按 outbound 转发到目标 |
 
 各被动观察手段实际看到的：
@@ -80,16 +82,16 @@ Reality 的抗识别效果，要分「被动监听」和「主动探测」两种
 Reality 很重要的一点是**应对主动探测**。检测方如果怀疑某个 IP 是代理，会主动发探测请求看看回应。三方角色：**探测方** ／ **VPS (Xray Reality)** ／ **真 www.microsoft.com**：
 
 1. **探测方 → VPS:443**：发送 TLS ClientHello，`SNI = www.microsoft.com`，但**没有 Reality 标记**（探测方没有服务端私钥，无法构造）
-2. **VPS Xray**：验证 Reality 标记失败 ✗ → 不当作合法客户端，把这条 TCP 连接**透明转发**给 `dest = www.microsoft.com:443`
+2. **VPS Xray**：验证 Reality 标记失败 ✗ → 不当作合法客户端，把这条 TCP 连接**透明转发**给 `target = www.microsoft.com:443`
 3. **VPS → 真 www.microsoft.com:443**：原样转发 ClientHello（VPS 不解密、不修改）
 4. **真 www.microsoft.com → VPS → 探测方**：microsoft 返回 ServerHello + 真证书 + 真页面，VPS 原样回放给探测方
-5. **探测方最终看到的**：完整 TLS 1.3 握手 + microsoft 的真证书（CA 可校验） + microsoft 的真实页面内容 → 从 TLS 握手和证书层看，返回结果与真实站点一致
+5. **探测方最终看到的**：完整 TLS 1.3 握手 + microsoft 的真证书（CA 可校验） + microsoft 的真实页面内容 → 从 TLS 握手和证书层看，返回结果更接近真实站点访问
 
-> **实战验证**：Reality 配好后，**用浏览器 IP 直连 `https://<VPS-IP>`** 应该看到「证书 CN 是 www.microsoft.com，但浏览器报 CN 与 IP 不匹配」的警告 —— 这是验证 Reality 回放是否工作的直观方式。能看到 microsoft 的真证书就说明回落机制 OK，反之要查 `dest` 出站连通性。
+> **实战验证**：Reality 配好后，**用浏览器 IP 直连 `https://<VPS-IP>`** 应该看到「证书 CN 是 www.microsoft.com，但浏览器报 CN 与 IP 不匹配」的警告 —— 这是验证 Reality 回放是否工作的直观方式。能看到 microsoft 的真证书就说明回落机制 OK，反之要查 `target` 出站连通性。
 
 **跟传统 v2ray + TLS 方案的关键差别**：
 
-- **传统方案**（v2ray + WebSocket + TLS + Nginx 反代）：被探测时，VPS 上的 Nginx 用自己的证书回包。即便配了「伪装站」（反代 nginx 默认页或某个真站），证书是 nginx 自签或某个非 microsoft 域名的证书，CA 签发机制就拦住了 —— 你不可能拿到 `microsoft.com` 的真证书。一对比就看穿。
+- **传统方案**（v2ray + WebSocket + TLS + Nginx 反代）：被探测时，VPS 上的 Nginx 用自己的证书回包。即便配了「伪装站」（反代 nginx 默认页或某个真站），证书也通常是你自己域名的证书，和探测请求里的 `microsoft.com` 对不上，证书链这一层就容易暴露。
 - **Reality 方案**：不返回任何自己生成的内容。**直接把探测请求中继给真 microsoft**，回包就是 microsoft 自己生成的（证书 / 签名 / 内容全真），至少在 TLS 握手和证书链这一层更接近真实访问。
 
 ---
@@ -98,12 +100,13 @@ Reality 很重要的一点是**应对主动探测**。检测方如果怀疑某�
 
 ### 2.1 安装 Xray
 
-通过官方脚本安装最新版本（**必须 sudo**，脚本会 self-check root）：
+通过官方脚本安装当前发布版（需要 root 权限）：
 ```bash
 sudo bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install
 ```
 
-> 不传 `--version` 安装 latest；想钉版本可改为 `@ install --version 1.8.0`。  
+> 不传 `--version` 会安装当前发布版；想钉版本可改为 `@ install --version <version>`。
+>
 > 安装完成后，Xray 可执行文件位于 `/usr/local/bin/xray`，配置文件位于 `/usr/local/etc/xray/config.json`，systemd 单元 `xray.service`（以 `nobody` 运行，已授 `CAP_NET_BIND_SERVICE`，可绑 443）。
 
 ### 2.2 生成 UUID + X25519 + ShortId
@@ -118,13 +121,13 @@ echo '---shortid---';  openssl rand -hex 8
 
 > - **UUID**：客户端身份认证
 > - **PrivateKey（私钥）**：填入服务端配置，务必保密
-> - **PublicKey（公钥）**：填入客户端配置，可多端共享。v26.x 输出写成 `Password (PublicKey): ...`，含义不变
-> - **Hash32**（v26.x 新增）：可选 fingerprint 校验，基础 Reality 配置不需要，可忽略
+> - **PublicKey（公钥）**：填入客户端配置。新版文档里客户端字段名逐步改成 `password`，但它对应的仍是服务端 X25519 公钥
+> - **ML-DSA-65**（v26.x 新增能力）：可选的后量子签名增强，基础 Reality 配置不需要；要启用时请按官方文档检查 target 证书长度和客户端支持
 > - **ShortId**：客户端校验位。**不要写 `"88"` `"888888"` 这种弱值**（容易被批量扫探到），用 `openssl rand -hex 8` 生成 8 字节随机数，对应 16 个十六进制字符
 
 ### 2.3 编写服务端配置文件
 
-**关键要求：** 回落目标网站（`dest`）必须支持 TLSv1.3，且要和 `serverNames` 里的 SNI 对得上。建议选访问稳定、证书链正常的知名站点，本例使用 `www.microsoft.com`。预先验证：
+**关键要求：** 回落目标网站（`target` / 旧字段 `dest`）要能正常完成 TLS 握手，且要和 `serverNames` 里的 SNI 对得上。建议选访问稳定、证书链正常的知名站点，本例使用 `www.microsoft.com`。预先验证：
 
 ```bash
 curl -sI --tlsv1.3 --max-time 5 https://www.microsoft.com -o /dev/null -w 'http=%{http_code}\n'   # 200 即可用
@@ -136,8 +139,8 @@ curl -sI --tlsv1.3 --max-time 5 https://www.microsoft.com -o /dev/null -w 'http=
 |------|------|------|
 | `id` | ✅ | 客户端 UUID，由 `xray uuid` 生成 |
 | `flow` | ❌ | 使用 TCP 时填 `xtls-rprx-vision`；H2 协议留空 |
-| `dest` | ✅ | 回落的真实网站，格式 `域名:443` |
-| `serverNames` | ✅ | 客户端可用的 SNI 列表，通常包含 dest 域名及其裸域/子域 |
+| `target` / `dest` | ✅ | 回落的真实网站，格式 `域名:443`；新版文档使用 `target`，旧字段 `dest` 仍作为别名 |
+| `serverNames` | ✅ | 客户端可用的 SNI 列表，通常包含 target 域名及其裸域/子域 |
 | `privateKey` | ✅ | 服务端私钥（Private key） |
 | `shortIds` | ✅ | 客户端 ID 列表，十六进制，长度为 2 的倍数，最多 16 个十六进制字符。**用 `openssl rand -hex 8` 生成，别用弱值** |
 | `maxTimeDiff` | ❌ | 允许的最大时间差（ms），`0` 为不限。建议设置一个合理窗口，例如 `60000`（60s），既宽容时钟漂移又降低重放风险 |
@@ -168,7 +171,7 @@ curl -sI --tlsv1.3 --max-time 5 https://www.microsoft.com -o /dev/null -w 'http=
         "security": "reality",
         "realitySettings": {
           "show": false,
-          "dest": "www.microsoft.com:443",
+          "target": "www.microsoft.com:443",
           "xver": 0,
           "serverNames": [
             "www.microsoft.com",
@@ -219,10 +222,10 @@ sudo ss -tlnp | grep 443            # 验证监听
 
 ### 2.5 排错方法
 
-**v26.x 一个常见坑：默认 `loglevel: warning` 不打印 `listening` 行**，启动后用 `journalctl` 只能看到 `Xray 26.x started` 然后就没下文了，看起来「started 但没在 listen」。这是假象 —— `ss -tlnp | grep 443` 能看到就 OK。要肉眼确认，把 `loglevel` 改 `debug` 跑前台：
+**v26.x 一个常见坑：默认 `loglevel: warning` 不一定打印 `listening` 行**，启动后用 `journalctl` 可能只能看到 `Xray 26.x started` 然后就没下文，看起来「started 但没在 listen」。这时以 `ss -tlnp | grep 443` 为准。要肉眼确认，可以临时把 `loglevel` 改 `debug` 跑前台：
 
 ```bash
-# 配置检查（v26.x 用 run -test，旧版的 xray test 已废弃）
+# 配置检查
 sudo /usr/local/bin/xray run -test -config /usr/local/etc/xray/config.json
 
 # 临时改 debug 跑前台，看到 [Info] transport/internet/tcp: listening TCP on [::]:443 才算 OK
@@ -239,7 +242,7 @@ sudo timeout 5 /usr/local/bin/xray run -config /usr/local/etc/xray/config.json
 - **客户端导入 URL 后连不上但手动填字段就好**：部分 iOS 客户端（如 Shadowrocket）对 `vless://` 里的 `pbk` `sid` `flow` 字段解析有时丢字段，**优先手动填**而非 URL 导入
 - 检查 443 端口占用：`sudo ss -tlnp | grep 443`
 - 检查 JSON 格式：`sudo /usr/local/bin/xray run -test -config /usr/local/etc/xray/config.json`
-- 确认 `dest` 支持 TLSv1.3：`curl -sI --tlsv1.3 https://www.microsoft.com`（200 即可用）
+- 确认 `target` 能正常 TLS 访问：`curl -sI --tlsv1.3 https://www.microsoft.com`（200 即可用）
 - AWS Lightsail / GCP / 阿里云等带云防火墙的实例，**OS 层 ufw 通了不算**，云控制台里的实例防火墙也要单独开 443（IPv4 + IPv6 都要）
 
 ---
@@ -280,7 +283,7 @@ lsmod | grep bbr                          # 应看到 tcp_bbr
 | 传输协议（Network/Transport） | `tcp` 或「原始/none」（不要套 ws/grpc） |
 | 安全类型（Security） | `reality` |
 | SNI | 与服务端 `serverNames` 一致，如 `www.microsoft.com` |
-| 公钥（PublicKey） | 服务端生成的 Public key（v26.x 输出里叫 `Password (PublicKey)`） |
+| 公钥（PublicKey / password） | 服务端生成的 X25519 公钥；新版文档里的客户端字段名叫 `password` |
 | ShortId | 服务端 `shortIds` 中的任意一项 |
 | uTLS 指纹（Fingerprint） | 建议填 `chrome` 或 `firefox` |
 | ALPN | 默认 `h2,http/1.1` 或留空都行（不影响 Reality 握手） |
@@ -289,7 +292,7 @@ lsmod | grep bbr                          # 应看到 tcp_bbr
 
 ### 4.2 客户端速查
 
-截至 2026-05，大多数主流客户端已经内置支持 Reality 的 Xray-core，下载最新版通常即可，无需手动切 Pre-Release：
+截至 2026-06，大多数主流客户端已经内置支持 Reality 的 Xray-core，下载最新版通常即可，无需手动切 Pre-Release：
 
 | 平台 | 客户端 | 下载 |
 |---|---|---|
@@ -297,7 +300,7 @@ lsmod | grep bbr                          # 应看到 tcp_bbr
 | macOS | V2rayU / FoXray | https://github.com/yanue/V2rayU/releases |
 | Android | V2rayNG | https://github.com/2dust/v2rayNG/releases |
 | iOS | Shadowrocket（付费）/ Streisand | App Store |
-| OpenWrt | PassWall2 / SSR Plus+ | OpenWrt 仓库（任意 2023 年后编译版都支持） |
+| OpenWrt | PassWall2 / SSR Plus+ | 建议使用近期维护版，老编译版本可能缺 Reality / Vision 支持 |
 | 通用核心 | sing-box / Clash.Meta（mihomo） | 各发行版仓库或 GitHub |
 
 **iOS Shadowrocket 注意**：URL 导入有时会丢字段（特别是 `pbk` `sid` `fp`），导致测试延迟超时但客户端不报错。**遇到测速失败优先手动按 4.1 字段表填**，不要依赖 URL 导入。
@@ -310,7 +313,7 @@ lsmod | grep bbr                          # 应看到 tcp_bbr
 
 传统方案若使用对称密钥（UUID），攻击者一旦获取客户端配置，即可实施中间人攻击。
 
-REALITY 使用 **X25519 非对称密钥 + TLSv1.3 key_share** 机制：
+REALITY 使用 **X25519 非对称密钥 + 修改后的 TLS 握手** 机制：
 - 即使攻击者获取到客户端公钥，也**难以验证某条连接是否属于 REALITY**
 - 难以进行有效的中间人攻击
 
@@ -331,11 +334,11 @@ REALITY 本身就是 TLS，可直接复用 **XTLS Vision** 的成熟解决方案
 ## 六、注意事项
 
 - Reality **不支持 CDN 代理**（如 Cloudflare 橙云），请勿将域名套 CDN 代理使用；CF **灰云（DNS only）** 仅做 DNS 解析不接管流量，等同直连 VPS，可以用（CF 在链路里只起 DNS 提供商作用）
-- `dest` 目标网站必须支持 TLSv1.3，建议选用 `www.microsoft.com`、`www.icloud.com`、`www.apple.com` 等访问稳定、证书链正常的知名站点。Cloudflare 系站点未必不能用，但由于边缘节点、证书和握手行为变化较多，排错成本更高
+- `target` / `dest` 目标网站需要能正常 TLS 访问，建议选用 `www.microsoft.com`、`www.icloud.com`、`www.apple.com` 等访问稳定、证书链正常的知名站点。Cloudflare 系站点未必不能用，但由于边缘节点、证书和握手行为变化较多，排错成本更高
 - 服务端 443 端口在使用期间不能被其他程序（Nginx、Caddy 等）占用，80 端口无特殊要求
 - ShortId **不要用弱值**（`88` `888888` 这种），用 `openssl rand -hex 8` 生成 16 个十六进制字符；`maxTimeDiff` 建议设一个合理窗口，例如 `60000`（60s），防重放又宽容时钟漂移
 - 技术持续更新，请关注 Xray 官方仓库（<https://github.com/XTLS/Xray-core/releases>）与官方 wiki（<https://xtls.github.io/>）获取最新版本信息
 
 ---
 
-*本文最初整理自 [bandwh.com](https://www.bandwh.com/net/994.html)（2023-04，对应 Xray 1.8.0），2026-05 根据 Xray-core v26.x 全面更新。*
+*本文最初整理自 [bandwh.com](https://www.bandwh.com/net/994.html)（2023-04，对应 Xray 1.8.0），2026-06 根据 Xray-core v26.x 文档重新核对。*
