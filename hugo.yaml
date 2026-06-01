@@ -98,10 +98,16 @@ menu:
       weight: -90
       params:
         icon: archives
+    - identifier: resume
+      name: 简历
+      url: /resume/
+      weight: -80
+      params:
+        icon: file-text
     - identifier: about
       name: 关于
       url: /about/
-      weight: -80
+      weight: -70
       params:
         icon: user
   social:
