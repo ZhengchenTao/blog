@@ -13,22 +13,9 @@
 - `assets/`：自定义样式和图片
 - `themes/stack/`：主题 submodule
 
-## 本地开发
+## 说明
 
-```bash
-git clone --recurse-submodules <repo>
-cd blog
-
-hugo server -D
-```
-
-需要 Hugo Extended ≥ 0.161.1。
-
-生产构建：
-
-```bash
-hugo --gc --minify
-```
+这是个人博客仓库，主要用于同步文章源码和站点配置。线上站点以发布后的内容为准。
 
 ## License
 

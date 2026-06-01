@@ -13,22 +13,9 @@ Live at <https://blog.zhengchentao.win/>.
 - `assets/`: custom styles and images
 - `themes/stack/`: theme submodule
 
-## Local development
+## Notes
 
-```bash
-git clone --recurse-submodules <repo>
-cd blog
-
-hugo server -D
-```
-
-Requires Hugo Extended ≥ 0.161.1.
-
-Production build:
-
-```bash
-hugo --gc --minify
-```
+This is a personal blog repository, mainly used to sync post sources and site configuration. The live site is the canonical published version.
 
 ## License
 
