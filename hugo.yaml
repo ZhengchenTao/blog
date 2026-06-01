@@ -1,5 +1,5 @@
 baseURL: "https://blog.zhengchentao.win/"
-title: "陶政辰的笔记本"
+title: "陶政辰的笔记"
 theme: stack
 
 defaultContentLanguage: zh
@@ -33,7 +33,7 @@ params:
   sidebar:
     compact: false
     emoji: ""
-    subtitle: "C# / .NET / React / Vue 工程师 · 上海 · 写写技术和不太成熟的思考"
+    subtitle: "C# / .NET 工程师，住在上海。这里写技术、网络、AI 和一些日常折腾。"
     avatar: "img/avatar.jpg"
 
   article:

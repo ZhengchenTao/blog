@@ -1,4 +1,4 @@
-# Zhengchen's Notebook
+# Zhengchen's Notes
 
 [简体中文](README.md) | English
 
