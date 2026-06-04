@@ -445,18 +445,6 @@ NAS 不是纯 Linux 服务器，DSM 有自己的封装层。排障时如果只�
 
 这些东西只有在你自己维护一套系统时，才会从概念变成手感。
 
-## 八、可以继续拆开的工程复盘
-
-这篇只是总览。里面很多坑都值得单独展开。
-
-后面比较适合拆成几篇：
-
-1. 内外网同域名访问：dnsmasq、NPM、证书和端口重定向
-2. Gitea Actions 跑在群晖 NAS 上：从 docker-in-docker 到 host 模式
-3. Claude custom connector 接入自建 MCP：DCR、PKCE、PRM、resource 和 aud
-4. 为什么我给 homelab 写了一个轻量 OAuth 授权中心
-5. NAS 上哪些服务最后被砍掉了，以及为什么
-
 如果说这套 NAS 最后给我的一个结论，那应该是：
 
 > homelab 的价值不在于把家里变成小机房，而在于给自己一个可以长期演化的工程系统。
