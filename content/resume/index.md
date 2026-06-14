@@ -93,6 +93,33 @@ AI 产品商业化项目，面向个人肖像数字化授权交易场景，交�
 
 **关键词**：.NET 10、ASP.NET Core、EF Core、SQL Server、Vue、Docker、Nginx、GitLab CI、Serilog
 
+### MVP / MSP 系统重构与数据迁移 | Microsoft 项目（博彦交付） | 2019.04 - 2020.09
+
+在博彦 Microsoft 专项交付环境工作，参与 MVP / MSP 系统重构、数据迁移和报表数据源建设。项目环境由 Microsoft 在博彦内部搭建，使用 Microsoft 资产、独立安检与 Microsoft 网络接入。
+
+- 使用 Azure Data Factory 编排数据流，为 Power BI 报表提供数据源。
+- 基于 React / Redux / Fluent UI 配合 .NET API 完成前端页面和数据交互。
+- 设计并实现通用快速启动框架，支持第三方登录、权限配置、租户隔离和 IdentityServer 集成。
+- 参与跨团队联调、数据迁移验证、旧系统数据口径梳理和项目交付支持。
+
+**关键词**：.NET Core、React、Redux、Fluent UI、Azure Data Factory、Power BI、SQL Server、IdentityServer
+
+### 自建开发与 AI 实验基础设施 | 个人项目 | 2024 - 至今
+
+围绕个人 NAS、Gitea、Obsidian、CI/CD、MCP 和 AI agent workflow 搭建长期自用研发环境，用于验证新技术、沉淀工程流程和支撑个人项目交付。
+
+- 自建 Gitea、Gitea Actions、Docker Compose、反向代理、OAuth 授权中心和多服务部署环境，支撑个人项目持续迭代。
+- 将 Obsidian 作为个人知识库与项目管理入口，通过 MCP 服务接入 Claude.ai，实现文档、代码仓库和任务流的 AI 辅助检索。
+- 维护 nas-auth、obsidian-mcp、gitea-mcp、DockPilot 等 .NET / AI Infra 项目，验证 OAuth、MCP、Docker 运维面板和 AI agent 工作流。
+- 沉淀 AI 协作开发规范，包括需求拆解、上下文约束、代码审查、自动化检查、最小复现和发布验收。
+
+**关键词**：.NET 10、Docker Compose、Gitea Actions、OAuth、MCP、Obsidian、Claude Code、Codex、Nginx、Caddy
+
+## 公开内容
+
+- [我把家用 NAS 搭成了一套个人基础设施](/posts/homelab-nas-infrastructure/)：复盘个人 NAS / Gitea Actions / MCP / nas-auth / CI/CD 组合成长期基础设施的过程。
+- [一份 AI 工程师的知识地图（2026 版）](/posts/ai-engineer-map/)：梳理 LLM、Prompt、RAG、MCP、Agent、AI 编码工具和企业级 AI 应用落地判断。
+
 ## 教育经历
 
 山东财经大学 | 企业管理专业 | 本科 | 2014 - 2018
