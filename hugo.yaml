@@ -110,6 +110,13 @@ menu:
       weight: -70
       params:
         icon: user
+    - identifier: ai-usage
+      name: AI 用量
+      url: "https://usage.zhengchentao.win/"
+      weight: -60
+      params:
+        icon: chart-bar
+        newTab: true
   social:
     - identifier: github
       name: GitHub
