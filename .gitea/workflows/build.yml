@@ -1,5 +1,20 @@
 name: Build and Deploy Blog
 
+# 2026-07-17：构建从 NAS runner（nas-runner-1）迁到云端 runner（cloud-runner-1）。
+# NAS 那台在加密机械盘上跑构建慢到不可用（同机 nas-auth 实测 27-42 分钟）。
+#
+# ⚠️ 本仓是公开仓。部署目标主机 / host key 一律走 secrets，不写进正文：
+#   secrets.NAS_CI_SSH_KEY       部署用私钥
+#   secrets.NAS_SSH_HOST         部署目标主机
+#   secrets.NAS_SSH_KNOWN_HOSTS  目标主机 host key（固定，不用 accept-new）
+#
+# 迁回 NAS runner 时要改回来的三处（git log 里 2026-07-17 那次 commit 是完整对照）：
+#   1. runs-on 仍是 ubuntu-latest，但 NAS runner 是 host 模式（step 直接在 runner
+#      容器内跑），/blog-public 由 runner compose 直接 bind 到 NAS
+#   2. Hugo 安装可改回直接从 github releases 拉（NAS 那边走家里的 Passwall 拉得动）；
+#      也可以继续用 generic package，那条路两边都通。见下方 Hugo 步骤注释
+#   3. deploy 改回一句 `rsync -av --delete public/ /blog-public/`
+
 on:
   push:
     branches: [main]
@@ -17,25 +32,75 @@ concurrency:
 
 jobs:
   build:
-    # host 模式:step 直接在 gitea-runner 容器内跑(Alpine),
-    # /blog-public 由 runner docker-compose 直接 bind 到 NAS,无需 act_runner 注入
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      # action 走 Gitea 镜像仓的全 URL 引用 —— 对云端 runner 就是本机，clone 秒级。
+      # 用 `actions/checkout@v4` 短写法会被解析到 github.com，那台机在国内拉不动
+      # （实测 connection timed out / unexpected EOF）。
+      - uses: https://git.aifacely.net/mirror/checkout@v4
         with:
           submodules: true
+          fetch-depth: 0
 
       - name: Install Hugo Extended
+        # 不从 github releases 拉：这台机在国内直连拉不动（实测静默超时），走 xray
+        # 代理也不行（yuanfang 是美西节点，19.5MB 拉不完）。
+        # 改从 git.aifacely.net 的 generic package 拉 —— 对本 runner 就是本机，
+        # 实测 5.4 秒。二进制是 2026-07-17 从 github releases 下载后原样上传的，
+        # sha256 已核对一致。
+        #
+        # 升级 Hugo 版本时：先把新版传成新的 package version，再改这里的 HUGO_VERSION。
+        #   curl -X PUT -H "Authorization: token <PACKAGES_TOKEN>" \
+        #     --upload-file hugo_extended_<ver>_linux-amd64.tar.gz \
+        #     https://git.aifacely.net/api/packages/zhengchen.tao/generic/hugo-extended/<ver>/hugo_extended_<ver>_linux-amd64.tar.gz
+        env:
+          PKG_TOKEN: ${{ secrets.AIFACELY_REGISTRY_TOKEN }}
         run: |
+          set -e
           HUGO_VERSION=0.161.1
-          curl -fsSL "https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/hugo_extended_${HUGO_VERSION}_linux-amd64.tar.gz" | tar -xz
-          mv hugo /usr/local/bin/
+          # 与上传时核对过的 sha256。对不上就是包被换了或传输截断，直接失败。
+          HUGO_SHA256=9b82cf3211b2321f189a005dd157e6f4bd5c65f2bf5e9eefd2f5e0803c12103c
+          URL="https://git.aifacely.net/api/packages/zhengchen.tao/generic/hugo-extended/${HUGO_VERSION}/hugo_extended_${HUGO_VERSION}_linux-amd64.tar.gz"
+          curl -fsSL --max-time 180 -H "Authorization: token ${PKG_TOKEN}" -o hugo.tar.gz "$URL"
+          echo "${HUGO_SHA256}  hugo.tar.gz" | sha256sum -c -
+          tar -xzf hugo.tar.gz hugo
+          install -m 755 hugo /usr/local/bin/hugo
+          rm -f hugo.tar.gz hugo
           hugo version
 
       - name: Build site
         run: hugo --gc --minify
 
-      - name: Deploy to /blog-public
+      # ---- deploy ----
+      # 云端 runner 摸不到 NAS 上 /blog-public（原来是 NAS runner compose 直接 bind 的）。
+      # 改成：把 public/ 打成 tar 从 stdin 灌给 NAS 侧的 ssh 强制命令
+      # （nas-infra/scripts/ci-deploy.sh），那边解到临时目录再本地 rsync --delete。
+      #
+      # 不直接给 CI 开 rsync over ssh，是因为那要放开强制命令（rsync 需要在远端跑
+      # `rsync --server`），等于这把 key 又能执行任意命令 —— tao 在 sudoers 里是
+      # NOPASSWD: ALL，那就等于把 NAS root 交出去了。
+      #
+      # ci-deploy.sh 侧有空包保护：解包为空直接失败，避免 --delete 把线上站清空。
+      - name: Deploy to NAS
         run: |
-          [ -d /blog-public ] || { echo "::error::/blog-public missing, runner compose 没挂上"; exit 1; }
-          rsync -av --delete public/ /blog-public/
+          set -e
+          # 先自检产物，空目录打包过去会被对面拒绝，但这里报错更早更清楚
+          [ -d public ] && [ -n "$(ls -A public)" ] || { echo "::error::hugo 产物 public/ 为空"; exit 1; }
+          echo "==> 产物文件数: $(find public -type f | wc -l)"
+
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "${{ secrets.NAS_CI_SSH_KEY }}" > ~/.ssh/nas_ci
+          chmod 600 ~/.ssh/nas_ci
+          printf '%s\n' "${{ secrets.NAS_SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts_nas
+          chmod 600 ~/.ssh/known_hosts_nas
+
+          tar czf - -C public . | ssh -i ~/.ssh/nas_ci \
+              -o UserKnownHostsFile=~/.ssh/known_hosts_nas \
+              -o StrictHostKeyChecking=yes \
+              -o BatchMode=yes \
+              -o ConnectTimeout=30 \
+              tao@${{ secrets.NAS_SSH_HOST }} "sync blog"
+
+      - name: Cleanup key
+        if: always()
+        run: rm -f ~/.ssh/nas_ci
