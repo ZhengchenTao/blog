@@ -2,6 +2,7 @@
 title: 我把家用 NAS 搭成了一套个人基础设施
 slug: homelab-nas-infrastructure
 date: 2026-06-04
+lastmod: 2026-08-11
 tags: [NAS, Homelab, OpenWrt, Docker, Gitea, CI/CD, Cloudflare, MCP]
 categories: [工程实践]
 description: "一次家用 NAS 的 homelab 架构复盘：从 OpenWrt、Cloudflare、Nginx Proxy Manager 到 Gitea Actions、MCP 和 nas-auth，记录它如何从存储设备长成个人基础设施。"
@@ -85,6 +86,8 @@ NAS 上的 Nginx Proxy Manager
   ↓
 具体 Docker 服务
 ```
+
+> **2026-08 更新**：外网链路后来整体切到了 Cloudflare Tunnel 出站回源，家里已经零入站端口，上图仅保留作历史记录，原因见 [四、几个关键取舍](#2-为什么不用-cloudflare-tunnel) 的更新注记。
 
 内网访问链路：
 
@@ -262,6 +265,8 @@ ezBookkeeping 这里还有一个很典型的工程缝合点：它本身是一个
 
 ### 2. 为什么不用 Cloudflare Tunnel
 
+> **2026-08 更新**：这一节已经被我自己推翻了。2026 年 7 月全站外网回源切到了 Cloudflare Tunnel——压垮旧方案的不是"黑盒"，而是 Cloudflare 对非标端口回源默认禁用缓存，全站静态资源三个月恒为 DYNAMIC，Free 计划下无解。完整的排查和转向过程写在[《Cloudflare 一直没缓存我的站，三个月后我才发现为什么》](/posts/cloudflare-8443-no-cache-tunnel/)。下面保留当时的判断原文：它在"入口可控、可解释性优先"这个维度上依然成立，只是当时我还不知道那条链路在缓存上要付的代价。
+
 Cloudflare Tunnel 很适合没有公网 IP、不能端口转发、只想快速把服务暴露出去的人。
 
 但我的场景里已经有可控的公网入口，而且希望保留更多网络控制权。Tunnel 会引入一条额外链路，排障时也多一个黑盒。
@@ -305,7 +310,7 @@ NAS 折腾到后面，一个重要能力不是“会装”，而是“会砍”�
 我先后放弃过一些方案：
 
 - AdGuard Home：最后用 OpenWrt dnsmasq 一条规则替代
-- Cloudflare Tunnel：公网入口已有，保留传统链路
+- Cloudflare Tunnel：公网入口已有，保留传统链路（2026-07 反转：最终还是迁到了 Tunnel，见上一节的更新注记）
 - Tailscale Split DNS：Tailscale 保留作基础远程访问，但放弃 Subnet Router + Split DNS + 统一域名入口
 - Seafile / Nextcloud / KodBox：真实文件访问需求没那么复杂
 - Paperless：没有稳定的文档归档场景
