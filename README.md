@@ -1,23 +1,23 @@
-# 陶政辰的博客
+# Zhengchen's Blog
 
-简体中文 | [English](README.en.md)
+English | [简体中文](README.zh-CN.md)
 
-个人博客源码，基于 [Hugo](https://gohugo.io/) 和 [hugo-theme-stack](https://github.com/CaiJimmy/hugo-theme-stack)。
+Personal blog source, built with [Hugo](https://gohugo.io/) and [hugo-theme-stack](https://github.com/CaiJimmy/hugo-theme-stack).
 
-线上地址：<https://blog.zhengchentao.win/>
+Live at <https://blog.zhengchentao.win/>.
 
-## 内容
+## Content
 
-- `content/posts/`：文章
-- `content/about/`：关于页
-- `assets/`：自定义样式和图片
-- `themes/stack/`：主题 submodule
+- `content/posts/`: posts
+- `content/about/`: about page
+- `assets/`: custom styles and images
+- `themes/stack/`: theme submodule
 
-## 说明
+## Notes
 
-这是个人博客仓库，主要用于同步文章源码和站点配置。线上站点以发布后的内容为准。
+This is a personal blog repository, mainly used to sync post sources and site configuration. The live site is the canonical published version.
 
 ## License
 
-* 文章内容：[CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/deed.zh)
-* 主题：见 `themes/stack/` 自身 license
+* Post content: [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/)
+* Theme: see `themes/stack/` for its own license
