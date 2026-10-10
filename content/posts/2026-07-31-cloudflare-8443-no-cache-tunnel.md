@@ -2,6 +2,7 @@
 title: Cloudflare 一直没缓存我的站，三个月后我才发现为什么
 slug: cloudflare-8443-no-cache-tunnel
 date: 2026-07-31
+lastmod: 2026-10-10
 tags: [Cloudflare, CDN, 缓存, Cloudflare-Tunnel, NAS, Homelab, 网络排查]
 categories: [工程实践]
 description: "外网访问慢了三个月，cf-cache-status 全站恒为 DYNAMIC。根因是一条看起来无害的 Origin Rule：Cloudflare 对非标端口回源默认禁用缓存，且 Free 计划无解。这篇复盘从症状、排除过程写到最反直觉的发现——规则匹配即触发缓存禁用，与实际回源路径无关——以及迁到 CF Tunnel 后的实测数字。"
@@ -21,6 +22,15 @@ cf-cache-status: DYNAMIC
 不是某个服务，是**全站**。博客的 CSS、1MB 的 echarts.min.js、带 hash 文件名的静态资源，统统 DYNAMIC。Cloudflare 把所有请求都当成动态内容处理，每一次访问都要回源到家里的 NAS——名义上是 CDN，实际上只干了反向代理的活。
 
 这篇复盘讲清楚三件事：根因是什么、为什么这么难查、迁到 Cloudflare Tunnel 之后实测收益有多大。
+
+> **2026-10 更新**：迁到 Tunnel 之后又跑了两个多月，有几处变化，都以“2026-10 更新”的形式插在对应位置，原文不改：
+>
+> - 首包时间：cloudflared 改成直连以后，接入的边缘从新加坡变成了美西，国内首包从 0.4 秒左右变成 0.6 秒左右（§五）；
+> - “零入站端口”不再成立：为了相册的大文件上传，单独开了一个灰云端口（§五、结尾）；
+> - Tunnel 自身又踩了三个坑：出站被代理带歪、cloudflared 假活、家宽 IPv4 出境定期断流（§六）；
+> - 反代从 Nginx Proxy Manager 换成了 Caddy（§六）。
+>
+> 整套外网访问（Tunnel + 内网 DNS + Tailscale）怎么分工，另写了一篇：[《没有固定公网 IP，也能把家里的服务开到外网》](/posts/cf-tunnel-tailscale-home-access/)。
 
 ## 一、背景：为什么我的回源端口是 8443
 
@@ -94,6 +104,8 @@ Cloudflare 支持代理一批非标端口（HTTPS 侧有 2053、2083、2087、20
 | Tunnel 回源，未命中缓存 | 0.39–0.46s | **未命中缓存已有 3 倍以上提升** |
 | Tunnel + 边缘缓存 HIT | ~0.31s | 1MB 静态资源从边缘直出 |
 
+> **2026-10 更新**：表里 Tunnel 那两行，是 cloudflared 的出站还经过路由器上的代理（新加坡节点）时测的，所以 cloudflared 接入的也是新加坡边缘，和测试机同一个机房。后来为了稳定性让它改走家宽直连（原因见 §六 的更新），anycast 把它路由到了美西边缘，国内访客的首包时间稳定在 **0.63–0.68s**。用 0.2 秒换掉了每小时好几次的全站断连，我认为值。静态资源命中缓存以后不受这个影响。另外免费计划也能开的 Smart Tiered Cache 我也开了，边缘之间先互相找缓存，少回一次家宽上行。
+
 两个值得展开的点：
 
 1. **还没命中缓存，就已经快了 3 倍**。这部分收益来自 tunnel 的持久连接：cloudflared 与边缘维持几条常驻连接，省掉了旧链路上每个请求都要付的回源 TCP + TLS 握手。动态应用（.NET 后台、相册）同样获得约 4 倍的 TTFB 改善——这个收益和缓存无关，纯粹是连接模型的差异。
@@ -105,13 +117,29 @@ Cloudflare 支持代理一批非标端口（HTTPS 侧有 2053、2083、2087、20
 - 外网链路不再依赖家宽公网 IP，跟踪 IP 漂移的 DDNS 脚本随之退役；
 - 入站 443 通不通，也不再影响这条链路。
 
+> **2026-10 更新**：第一条现在要打个折扣。家人在外地用 Immich 备份长视频，单个文件经常超过 Cloudflare 免费计划 100MB 的单请求上限，所以我单独开了一个灰云子域名，在一个高端口上直连家宽，这个端口只服务相册上传。来龙去脉和防护做法见[《没有固定公网 IP，也能把家里的服务开到外网》](/posts/cf-tunnel-tailscale-home-access/)第五节。其余所有服务仍然只走 Tunnel。
+
 ## 六、迁移路上的另外两个坑
 
 **QUIC 在国内环境不可靠，且 cloudflared 不会自动降级。** cloudflared 默认用 QUIC（UDP 7844）连边缘。部署当天测试一切正常，两天后 UDP 通道被切断，外网整站 503——cloudflared 检测到 QUIC 不通后不会自动回退到 TCP，而是停在断连状态。解法是显式固定协议：环境变量 `TUNNEL_TRANSPORT_PROTOCOL=http2`。国内环境建议部署时就固定 http2，不要把可用性押在 UDP 上。
 
+> **2026-10 更新**：后来我又试过一次。新版 cloudflared 启动自检明确打印 “QUIC connection successful”，我就把协议改回了 `auto`，结果跑了十分钟左右全站 530，当天又改回 http2。两次都是同一个模式：握手能过，跑一会儿再掐。所以结论更明确了：别信启动自检，固定 http2。
+
 **在家里测不了外网链路。** 我的内网 DNS 把自家域名劫持到 NAS 直连，不经 CF——这意味着在家做的所有“外网验证”其实都在测内网路径。判别方法很简单：响应头里没有 `cf-ray`，就说明根本没过 Cloudflare。外网链路的验证一律从境外机器发起，这是这次排查里长出来的采样纪律。
 
 （还有一个 NPM strict SNI 与 cloudflared wildcard ingress 的握手坑，比较场景特定，一句话带过：wildcard ingress 指向 IP 时 cloudflared 不发 SNI，开了 strict SNI 的反代会直接拒绝握手，需要在 ingress 里固定 `originServerName` 当锚点。）
+
+> **2026-10 更新**：反代后来从 Nginx Proxy Manager 换成了 Caddy，锚点 SNI 改由一张 Let's Encrypt 通配证书覆盖。这个坑变成了另一种形式：通配证书必须一直有效，它一过期，全站 Tunnel 握手一起挂。
+
+### 2026-10 补：后来又踩的三个坑
+
+**一、cloudflared 的出站被代理带歪了。** 文章发出当天，外网全站 Error 1033，NAS 和容器都好好的。原因是路由器上的透明代理把 cloudflared 到 Cloudflare 的长连接全带去了新加坡节点，节点一抖，几条连接同时断，全站就挂。翻日志发现，11 天里断了 141 次，而且越来越频繁。修法是在代理里加一条分流规则，只让 Cloudflare 边缘的网段和 `argotunnel.com` 走直连，其余流量照旧。§五 更新里的 0.2 秒延迟，就是这次改动的代价。教训：**Tunnel 的出站链路也是可用性的一部分，不要让它经过任何你控制不了的节点。**
+
+**二、cloudflared 会“假活”。** 有一次全站 1033 持续了 41 分钟，cloudflared 的日志一行没写，自己的健康检查也说正常：TCP 连接名义上还在，数据其实已经发不出去，Cloudflare 那边早判它死了。它要等 TCP 重传退避超时才会自己醒。我的解法是一个 watchdog，每 30 秒问 Cloudflare API 这个 tunnel 还有几条连接，连续三次没有就重启。注意 API 查不到的时候只记日志、不重启，因为探针本身也可能出问题。上线以后，同类故障的可见时长压到了两分钟以内。
+
+**三、家宽 IPv4 出境会定期断 7–8 分钟。** watchdog 上线后还是隔三差五断一次。把一个多月里的 73 次中断逐个对拍，规律很清楚：每次约 7–8 分钟，重启没用（没重启的那次也是 8 分钟）；断的是 IPv4 出境的数据面，握手能过、数据不走；**同一时刻 IPv6 完全正常**。所以我在同一个 tunnel 上又挂了一个只走 IPv6 的 cloudflared（`TUNNEL_EDGE_IP_VERSION=6`），平时 IPv4、IPv6 各 4 条连接。实测冻结 IPv4 那一路，Cloudflare 大约 90 秒摘掉它，站点只断了一个请求。watchdog 也改成按 connector 分别判断，谁掉线重启谁。
+
+这三个坑有一个共同的教训：**判断站点能不能用，要看它实际能不能服务，不能看任何一方的自报状态。** cloudflared 的日志、它自己的就绪检查、Cloudflare 后台的 healthy 标记，我都见过它们在全站不可用时显示正常。
 
 ## 七、教训
 
@@ -123,3 +151,5 @@ Cloudflare 支持代理一批非标端口（HTTPS 侧有 2053、2083、2087、20
 ---
 
 这套架构迁移完成后，家里的 NAS 对公网是零入站端口的：所有外网流量走 cloudflared 出站隧道，所有内网流量走本地 DNS 直连。回头看，这个“众所周知”的限制反而把整套架构推向了一个更干净的形态——也算是意外的收获。
+
+> **2026-10 更新**：现在要加一个限定：除了专门给相册上传开的那一个灰云端口，其余仍然是零入站。内网、Tunnel、Tailscale 三条路各管什么，见[《没有固定公网 IP，也能把家里的服务开到外网》](/posts/cf-tunnel-tailscale-home-access/)。
